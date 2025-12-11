@@ -61,7 +61,7 @@
     schedule
     (let
       (
-        (current-time block-time)
+        (current-time stacks-block-time)
         (start-time (get start-time schedule))
         (cliff-end (+ start-time (get cliff-duration schedule)))
         (vesting-end (+ start-time (get vesting-duration schedule)))
@@ -121,7 +121,7 @@
     )
     
     ;; Log creation event
-    (try! (log-vesting-event beneficiary u0 "schedule-created"))
+    (log-vesting-event beneficiary u0 "schedule-created")
     
     (var-set total-vesting-schedules (+ (var-get total-vesting-schedules) u1))
     (ok true)
@@ -156,7 +156,7 @@
         (try! (stx-transfer? available-amount current-contract beneficiary))
         
         ;; Log claim event
-        (try! (log-vesting-event beneficiary available-amount "tokens-claimed"))
+        (log-vesting-event beneficiary available-amount "tokens-claimed")
         
         ;; Return success
         (ok available-amount)
@@ -201,7 +201,6 @@
     })
     
     (var-set event-counter (+ event-id u1))
-    (ok true)
   )
 )
 
@@ -268,7 +267,7 @@
           { beneficiary: beneficiary }
           (merge schedule { is-active: false })
         )
-        (try! (log-vesting-event beneficiary u0 "schedule-revoked"))
+        (log-vesting-event beneficiary u0 "schedule-revoked")
         (ok true)
       )
       err-not-found

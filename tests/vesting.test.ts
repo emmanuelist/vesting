@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { Cl } from "@stacks/transactions";
+import { Cl, ClarityType } from "@stacks/transactions";
 
 const accounts = simnet.getAccounts();
 const deployer = accounts.get("deployer")!;
@@ -24,7 +24,7 @@ describe("Token Vesting Contract", () => {
         deployer
       );
       // Just verify it returns a uint type
-      expect(result.type).toBe(Cl.ClarityType.UInt);
+      expect(result.type).toBe(ClarityType.UInt);
     });
 
     it("starts with zero vesting schedules", () => {
@@ -67,7 +67,7 @@ describe("Token Vesting Contract", () => {
       );
       
       // Verify schedule exists
-      expect(schedule.result.type).toBe(Cl.ClarityType.OptionalSome);
+      expect(schedule.result.type).toBe(ClarityType.OptionalSome);
     });
 
     it("prevents non-owner from creating vesting schedule", () => {
@@ -271,7 +271,7 @@ describe("Token Vesting Contract", () => {
       ).result;
 
       // Verify schedule exists and has correct structure
-      expect(schedule.type).toBe(Cl.ClarityType.OptionalSome);
+      expect(schedule.type).toBe(ClarityType.OptionalSome);
     });
 
     it("prevents claiming immediately after creation", () => {
@@ -333,7 +333,7 @@ describe("Token Vesting Contract", () => {
       ).result;
 
       // Verify schedule exists
-      expect(schedule.type).toBe(Cl.ClarityType.OptionalSome);
+      expect(schedule.type).toBe(ClarityType.OptionalSome);
     });
 
     it("prevents non-owner from revoking", () => {
@@ -441,7 +441,7 @@ describe("Token Vesting Contract", () => {
       );
 
       // Verify event exists
-      expect(result.type).toBe(Cl.ClarityType.OptionalSome);
+      expect(result.type).toBe(ClarityType.OptionalSome);
     });
   });
 });

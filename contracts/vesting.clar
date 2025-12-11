@@ -220,7 +220,7 @@
     schedule
     (let
       (
-        (current-time block-time)
+        (current-time stacks-block-time)
         (start-time (get start-time schedule))
         (vesting-end (+ start-time (get vesting-duration schedule)))
       )

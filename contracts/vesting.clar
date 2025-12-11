@@ -1,5 +1,5 @@
 ;; Token Vesting Contract with Clarity 4 Features
-;; Demonstrates: block-time, restrict-assets?, and to-consensus-buff?
+;; Demonstrates: block-time and to-consensus-buff?
 
 ;; ============================================
 ;; Constants and Error Codes
@@ -129,7 +129,7 @@
 )
 
 ;; ============================================
-;; Clarity 4 Feature: restrict-assets?
+;; Claim Vested Tokens
 ;; ============================================
 
 ;; Claim vested tokens with asset protection
@@ -144,32 +144,21 @@
     (match (map-get? vesting-schedules { beneficiary: beneficiary })
       schedule
       (begin
-        ;; CLARITY 4 FEATURE: Restrict assets to prevent over-withdrawal
-        ;; This wraps the entire operation and ensures only the calculated amount can leave
-        (unwrap! (restrict-assets? 
-          (as-contract tx-sender)
-          ((with-stx available-amount))
-          ;; Body expressions
-          (begin
-            ;; Update claimed amount
-            (map-set vesting-schedules
-              { beneficiary: beneficiary }
-              (merge schedule {
-                claimed-amount: (+ (get claimed-amount schedule) available-amount)
-              })
-            )
-            
-            ;; Transfer tokens from contract to beneficiary
-            (try! (as-contract (stx-transfer? available-amount tx-sender beneficiary)))
-            
-            ;; Log claim event
-            (try! (log-vesting-event beneficiary available-amount "tokens-claimed"))
-            
-            ;; Return success
-            available-amount
-          )
-        ) err-unauthorized)
+        ;; Update claimed amount to prevent over-withdrawal
+        (map-set vesting-schedules
+          { beneficiary: beneficiary }
+          (merge schedule {
+            claimed-amount: (+ (get claimed-amount schedule) available-amount)
+          })
+        )
         
+        ;; Transfer tokens from contract to beneficiary
+        (try! (as-contract (stx-transfer? available-amount tx-sender beneficiary)))
+        
+        ;; Log claim event
+        (try! (log-vesting-event beneficiary available-amount "tokens-claimed"))
+        
+        ;; Return success
         (ok available-amount)
       )
       err-not-found

@@ -334,3 +334,92 @@ describe("Token Vesting Contract", () => {
         [Cl.principal(wallet1)],
         wallet1
       ).result;
+
+      expect(schedule).toBeSome(
+        Cl.tuple({
+          "total-amount": Cl.uint(1000000),
+          "claimed-amount": Cl.uint(500000),
+          "start-time": Cl.uint(simnet.blockTime - 250),
+          "cliff-duration": Cl.uint(100),
+          "vesting-duration": Cl.uint(500),
+          "is-active": Cl.bool(true),
+        })
+      );
+    });
+
+    it("prevents double claiming", () => {
+      // Mine to 250 blocks
+      simnet.mineEmptyBlocks(250);
+
+      // First claim
+      simnet.callPublicFn("vesting", "claim-vested-tokens", [], wallet1);
+
+      // Try to claim again immediately
+      const { result } = simnet.callPublicFn(
+        "vesting",
+        "claim-vested-tokens",
+        [],
+        wallet1
+      );
+
+      expect(result).toBeErr(Cl.uint(104)); // err-no-tokens-available
+    });
+
+    it("allows multiple claims as tokens vest", () => {
+      // First claim at 50% (250 blocks)
+      simnet.mineEmptyBlocks(250);
+      let result = simnet.callPublicFn(
+        "vesting",
+        "claim-vested-tokens",
+        [],
+        wallet1
+      ).result;
+      expect(result).toBeOk(Cl.uint(500000));
+
+      // Second claim at 75% (125 more blocks = 375 total)
+      simnet.mineEmptyBlocks(125);
+      result = simnet.callPublicFn(
+        "vesting",
+        "claim-vested-tokens",
+        [],
+        wallet1
+      ).result;
+      expect(result).toBeOk(Cl.uint(250000));
+
+      // Final claim after completion (200+ more blocks)
+      simnet.mineEmptyBlocks(200);
+      result = simnet.callPublicFn(
+        "vesting",
+        "claim-vested-tokens",
+        [],
+        wallet1
+      ).result;
+      expect(result).toBeOk(Cl.uint(250000));
+    });
+
+    it("prevents claiming from non-existent schedule", () => {
+      const { result } = simnet.callPublicFn(
+        "vesting",
+        "claim-vested-tokens",
+        [],
+        wallet2
+      );
+
+      expect(result).toBeErr(Cl.uint(101)); // err-not-found
+    });
+  });
+
+  describe("Admin Functions", () => {
+    beforeEach(() => {
+      simnet.callPublicFn(
+        "vesting",
+        "create-vesting-schedule",
+        [
+          Cl.principal(wallet1),
+          Cl.uint(1000000),
+          Cl.uint(100),
+          Cl.uint(500),
+        ],
+        deployer
+      );
+    });

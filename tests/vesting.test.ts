@@ -423,3 +423,80 @@ describe("Token Vesting Contract", () => {
         deployer
       );
     });
+
+    it("allows owner to revoke vesting schedule", () => {
+      const { result } = simnet.callPublicFn(
+        "vesting",
+        "revoke-vesting",
+        [Cl.principal(wallet1)],
+        deployer
+      );
+
+      expect(result).toBeOk(Cl.bool(true));
+
+      // Verify schedule is inactive
+      const schedule = simnet.callReadOnlyFn(
+        "vesting",
+        "get-vesting-schedule",
+        [Cl.principal(wallet1)],
+        deployer
+      ).result;
+
+      expect(schedule).toBeSome(
+        Cl.tuple({
+          "total-amount": Cl.uint(1000000),
+          "claimed-amount": Cl.uint(0),
+          "start-time": Cl.uint(simnet.blockTime),
+          "cliff-duration": Cl.uint(100),
+          "vesting-duration": Cl.uint(500),
+          "is-active": Cl.bool(false),
+        })
+      );
+    });
+
+    it("prevents non-owner from revoking", () => {
+      const { result } = simnet.callPublicFn(
+        "vesting",
+        "revoke-vesting",
+        [Cl.principal(wallet1)],
+        wallet1
+      );
+
+      expect(result).toBeErr(Cl.uint(100)); // err-owner-only
+    });
+
+    it("returns error when revoking non-existent schedule", () => {
+      const { result } = simnet.callPublicFn(
+        "vesting",
+        "revoke-vesting",
+        [Cl.principal(wallet2)],
+        deployer
+      );
+
+      expect(result).toBeErr(Cl.uint(101)); // err-not-found
+    });
+  });
+
+  describe("Contract Funding", () => {
+    it("allows anyone to fund the contract", () => {
+      const fundAmount = 5000000;
+
+      const { result } = simnet.callPublicFn(
+        "vesting",
+        "fund-contract",
+        [Cl.uint(fundAmount)],
+        wallet1
+      );
+
+      expect(result).toBeOk(Cl.bool(true));
+
+      // Check contract balance
+      const balance = simnet.callReadOnlyFn(
+        "vesting",
+        "get-contract-balance",
+        [],
+        wallet1
+      ).result;
+
+      expect(balance).toBeOk(Cl.uint(fundAmount));
+    });

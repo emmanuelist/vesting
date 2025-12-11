@@ -246,3 +246,91 @@ describe("Token Vesting Contract", () => {
       ).result;
       expect(result).toBeOk(Cl.bool(true));
     });
+
+    it("calculates vesting progress percentage", () => {
+      // At start
+      let result = simnet.callReadOnlyFn(
+        "vesting",
+        "get-vesting-progress",
+        [Cl.principal(wallet1)],
+        wallet1
+      ).result;
+      expect(result).toBeOk(Cl.uint(0));
+
+      // At 50% (250 blocks)
+      simnet.mineEmptyBlocks(250);
+      result = simnet.callReadOnlyFn(
+        "vesting",
+        "get-vesting-progress",
+        [Cl.principal(wallet1)],
+        wallet1
+      ).result;
+      expect(result).toBeOk(Cl.uint(50));
+
+      // After completion (600 blocks)
+      simnet.mineEmptyBlocks(400);
+      result = simnet.callReadOnlyFn(
+        "vesting",
+        "get-vesting-progress",
+        [Cl.principal(wallet1)],
+        wallet1
+      ).result;
+      expect(result).toBeOk(Cl.uint(100));
+    });
+  });
+
+  describe("Claiming Vested Tokens", () => {
+    beforeEach(() => {
+      // Create vesting schedule
+      simnet.callPublicFn(
+        "vesting",
+        "create-vesting-schedule",
+        [
+          Cl.principal(wallet1),
+          Cl.uint(1000000),
+          Cl.uint(100),
+          Cl.uint(500),
+        ],
+        deployer
+      );
+
+      // Fund the contract
+      simnet.callPublicFn(
+        "vesting",
+        "fund-contract",
+        [Cl.uint(2000000)],
+        deployer
+      );
+    });
+
+    it("prevents claiming before cliff", () => {
+      const { result } = simnet.callPublicFn(
+        "vesting",
+        "claim-vested-tokens",
+        [],
+        wallet1
+      );
+
+      expect(result).toBeErr(Cl.uint(104)); // err-no-tokens-available
+    });
+
+    it("allows claiming after cliff period", () => {
+      // Mine to 250 blocks (50% vested)
+      simnet.mineEmptyBlocks(250);
+
+      const { result } = simnet.callPublicFn(
+        "vesting",
+        "claim-vested-tokens",
+        [],
+        wallet1
+      );
+
+      expect(result).toBeOk(Cl.uint(500000));
+
+      // Verify claimed amount was updated
+      const schedule = simnet.callReadOnlyFn(
+        "vesting",
+        "get-vesting-schedule",
+        [Cl.principal(wallet1)],
+        wallet1
+      ).result;

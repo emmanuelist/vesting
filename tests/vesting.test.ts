@@ -500,3 +500,72 @@ describe("Token Vesting Contract", () => {
 
       expect(balance).toBeOk(Cl.uint(fundAmount));
     });
+
+    it("accumulates multiple funding transactions", () => {
+      simnet.callPublicFn("vesting", "fund-contract", [Cl.uint(1000000)], wallet1);
+      simnet.callPublicFn("vesting", "fund-contract", [Cl.uint(2000000)], wallet2);
+
+      const balance = simnet.callReadOnlyFn(
+        "vesting",
+        "get-contract-balance",
+        [],
+        deployer
+      ).result;
+
+      expect(balance).toBeOk(Cl.uint(3000000));
+    });
+  });
+
+  describe("Event Logging", () => {
+    it("logs vesting events with to-consensus-buff", () => {
+      // Create a schedule (triggers log event)
+      const { events } = simnet.callPublicFn(
+        "vesting",
+        "create-vesting-schedule",
+        [
+          Cl.principal(wallet1),
+          Cl.uint(1000000),
+          Cl.uint(100),
+          Cl.uint(500),
+        ],
+        deployer
+      );
+
+      // Check for print event
+      const printEvent = events.find((e) => e.event === "print_event");
+      expect(printEvent).toBeDefined();
+    });
+
+    it("retrieves event details by ID", () => {
+      // Create schedule (event 0)
+      simnet.callPublicFn(
+        "vesting",
+        "create-vesting-schedule",
+        [
+          Cl.principal(wallet1),
+          Cl.uint(1000000),
+          Cl.uint(100),
+          Cl.uint(500),
+        ],
+        deployer
+      );
+
+      // Get event
+      const { result } = simnet.callReadOnlyFn(
+        "vesting",
+        "get-vesting-event",
+        [Cl.uint(0)],
+        deployer
+      );
+
+      expect(result).toBeSome(
+        Cl.tuple({
+          beneficiary: Cl.principal(wallet1),
+          amount: Cl.uint(0),
+          timestamp: Cl.uint(simnet.blockTime),
+          "event-type": Cl.stringAscii("schedule-created"),
+        })
+      );
+    });
+  });
+});

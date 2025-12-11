@@ -52,7 +52,7 @@
 
 ;; Get the current block timestamp
 (define-read-only (get-current-time)
-  block-time
+  stacks-block-time
 )
 
 ;; Calculate vested amount based on current time
@@ -113,7 +113,7 @@
       {
         total-amount: total-amount,
         claimed-amount: u0,
-        start-time: block-time,
+        start-time: stacks-block-time,
         cliff-duration: cliff-duration,
         vesting-duration: vesting-duration,
         is-active: true
@@ -153,7 +153,7 @@
         )
         
         ;; Transfer tokens from contract to beneficiary
-        (try! (as-contract (stx-transfer? available-amount tx-sender beneficiary)))
+        (try! (stx-transfer? available-amount current-contract beneficiary))
         
         ;; Log claim event
         (try! (log-vesting-event beneficiary available-amount "tokens-claimed"))
@@ -179,7 +179,7 @@
   (let
     (
       (event-id (var-get event-counter))
-      (current-time block-time)
+      (current-time stacks-block-time)
     )
     (map-set vesting-events
       { event-id: event-id }
@@ -237,7 +237,7 @@
 (define-read-only (is-cliff-passed (beneficiary principal))
   (match (map-get? vesting-schedules { beneficiary: beneficiary })
     schedule
-    (ok (>= block-time (+ (get start-time schedule) (get cliff-duration schedule))))
+    (ok (>= stacks-block-time (+ (get start-time schedule) (get cliff-duration schedule))))
     err-not-found
   )
 )
@@ -278,10 +278,10 @@
 
 ;; Fund the contract (anyone can fund it)
 (define-public (fund-contract (amount uint))
-  (stx-transfer? amount tx-sender (as-contract tx-sender))
+  (stx-transfer? amount tx-sender current-contract)
 )
 
 ;; Get contract balance
 (define-read-only (get-contract-balance)
-  (ok (stx-get-balance (as-contract tx-sender)))
+  (ok (stx-get-balance current-contract))
 )

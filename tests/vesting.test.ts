@@ -160,3 +160,89 @@ describe("Token Vesting Contract", () => {
       expect(result).toBeOk(Cl.uint(1));
     });
   });
+
+  describe("Vesting Calculations", () => {
+    beforeEach(() => {
+      // Create a vesting schedule: 1M tokens, 100 blocks cliff, 500 blocks vesting
+      simnet.callPublicFn(
+        "vesting",
+        "create-vesting-schedule",
+        [
+          Cl.principal(wallet1),
+          Cl.uint(1000000),
+          Cl.uint(100),
+          Cl.uint(500),
+        ],
+        deployer
+      );
+    });
+
+    it("returns zero vested amount before cliff", () => {
+      const { result } = simnet.callReadOnlyFn(
+        "vesting",
+        "calculate-vested-amount",
+        [Cl.principal(wallet1)],
+        wallet1
+      );
+      expect(result).toBeOk(Cl.uint(0));
+    });
+
+    it("returns error for non-existent schedule", () => {
+      const { result } = simnet.callReadOnlyFn(
+        "vesting",
+        "calculate-vested-amount",
+        [Cl.principal(wallet2)],
+        wallet2
+      );
+      expect(result).toBeErr(Cl.uint(101)); // err-not-found
+    });
+
+    it("calculates linear vesting after cliff", () => {
+      // Mine blocks to pass cliff and reach 50% vesting (250 blocks from start)
+      simnet.mineEmptyBlocks(250);
+
+      const { result } = simnet.callReadOnlyFn(
+        "vesting",
+        "calculate-vested-amount",
+        [Cl.principal(wallet1)],
+        wallet1
+      );
+
+      // At 250 blocks: (1000000 * 250) / 500 = 500000
+      expect(result).toBeOk(Cl.uint(500000));
+    });
+
+    it("returns all tokens after vesting period ends", () => {
+      // Mine blocks to complete vesting (500+ blocks)
+      simnet.mineEmptyBlocks(600);
+
+      const { result } = simnet.callReadOnlyFn(
+        "vesting",
+        "calculate-vested-amount",
+        [Cl.principal(wallet1)],
+        wallet1
+      );
+
+      expect(result).toBeOk(Cl.uint(1000000));
+    });
+
+    it("checks if cliff has passed", () => {
+      let result = simnet.callReadOnlyFn(
+        "vesting",
+        "is-cliff-passed",
+        [Cl.principal(wallet1)],
+        wallet1
+      ).result;
+      expect(result).toBeOk(Cl.bool(false));
+
+      // Mine blocks past cliff
+      simnet.mineEmptyBlocks(150);
+
+      result = simnet.callReadOnlyFn(
+        "vesting",
+        "is-cliff-passed",
+        [Cl.principal(wallet1)],
+        wallet1
+      ).result;
+      expect(result).toBeOk(Cl.bool(true));
+    });

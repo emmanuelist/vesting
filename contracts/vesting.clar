@@ -119,3 +119,127 @@
         is-active: true
       }
     )
+
+    ;; Log creation event
+    (try! (log-vesting-event beneficiary u0 "schedule-created"))
+    
+    (var-set total-vesting-schedules (+ (var-get total-vesting-schedules) u1))
+    (ok true)
+  )
+)
+
+;; ============================================
+;; Clarity 4 Feature: restrict-assets?
+;; ============================================
+
+;; Claim vested tokens with asset protection
+(define-public (claim-vested-tokens)
+  (let
+    (
+      (beneficiary tx-sender)
+      (available-amount (unwrap! (calculate-vested-amount beneficiary) err-not-found))
+    )
+    (asserts! (> available-amount u0) err-no-tokens-available)
+    
+    (match (map-get? vesting-schedules { beneficiary: beneficiary })
+      schedule
+      (begin
+        ;; CLARITY 4 FEATURE: Restrict assets to prevent over-withdrawal
+        ;; This wraps the entire operation and ensures only the calculated amount can leave
+        (unwrap! (restrict-assets? 
+          (as-contract tx-sender)
+          ((with-stx available-amount))
+          ;; Body expressions
+          (begin
+            ;; Update claimed amount
+            (map-set vesting-schedules
+              { beneficiary: beneficiary }
+              (merge schedule {
+                claimed-amount: (+ (get claimed-amount schedule) available-amount)
+              })
+            )
+            
+            ;; Transfer tokens from contract to beneficiary
+            (try! (as-contract (stx-transfer? available-amount tx-sender beneficiary)))
+            
+            ;; Log claim event
+            (try! (log-vesting-event beneficiary available-amount "tokens-claimed"))
+            
+            ;; Return success
+            available-amount
+          )
+        ) err-unauthorized)
+        
+        (ok available-amount)
+      )
+      err-not-found
+    )
+  )
+)
+
+;; ============================================
+;; Clarity 4 Feature: to-consensus-buff?
+;; ============================================
+
+;; Log vesting event with human-readable message
+(define-private (log-vesting-event 
+  (beneficiary principal)
+  (amount uint)
+  (event-type (string-ascii 20))
+)
+  (let
+    (
+      (event-id (var-get event-counter))
+      (current-time block-time)
+    )
+    (map-set vesting-events
+      { event-id: event-id }
+      {
+        beneficiary: beneficiary,
+        amount: amount,
+        timestamp: current-time,
+        event-type: event-type
+      }
+    )
+    
+    ;; CLARITY 4 FEATURE: Create readable log message
+    ;; Note: to-consensus-buff? converts principal to buffer for logging
+    (print {
+      message: event-type,
+      beneficiary-buff: (unwrap-panic (to-consensus-buff? beneficiary)),
+      amount: amount,
+      timestamp: current-time
+    })
+    
+    (var-set event-counter (+ event-id u1))
+    (ok true)
+  )
+)
+
+;; ============================================
+;; Read-Only Functions
+;; ============================================
+
+;; Get vesting schedule details
+(define-read-only (get-vesting-schedule (beneficiary principal))
+  (map-get? vesting-schedules { beneficiary: beneficiary })
+)
+
+;; Get vesting progress percentage (0-100)
+(define-read-only (get-vesting-progress (beneficiary principal))
+  (match (map-get? vesting-schedules { beneficiary: beneficiary })
+    schedule
+    (let
+      (
+        (current-time block-time)
+        (start-time (get start-time schedule))
+        (vesting-end (+ start-time (get vesting-duration schedule)))
+      )
+      (if (>= current-time vesting-end)
+        (ok u100)
+        (ok (/ (* (- current-time start-time) u100) (get vesting-duration schedule)))
+      )
+    )
+    err-not-found
+  )
+)

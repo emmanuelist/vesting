@@ -119,7 +119,7 @@
         is-active: true
       }
     )
-
+    
     ;; Log creation event
     (try! (log-vesting-event beneficiary u0 "schedule-created"))
     
@@ -242,4 +242,57 @@
     )
     err-not-found
   )
+)
+
+;; Check if cliff period has passed
+(define-read-only (is-cliff-passed (beneficiary principal))
+  (match (map-get? vesting-schedules { beneficiary: beneficiary })
+    schedule
+    (ok (>= block-time (+ (get start-time schedule) (get cliff-duration schedule))))
+    err-not-found
+  )
+)
+
+;; Get event details
+(define-read-only (get-vesting-event (event-id uint))
+  (map-get? vesting-events { event-id: event-id })
+)
+
+;; Get total number of vesting schedules
+(define-read-only (get-total-schedules)
+  (ok (var-get total-vesting-schedules))
+)
+
+;; ============================================
+;; Admin Functions
+;; ============================================
+
+;; Revoke a vesting schedule (only owner)
+(define-public (revoke-vesting (beneficiary principal))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    
+    (match (map-get? vesting-schedules { beneficiary: beneficiary })
+      schedule
+      (begin
+        (map-set vesting-schedules
+          { beneficiary: beneficiary }
+          (merge schedule { is-active: false })
+        )
+        (try! (log-vesting-event beneficiary u0 "schedule-revoked"))
+        (ok true)
+      )
+      err-not-found
+    )
+  )
+)
+
+;; Fund the contract (anyone can fund it)
+(define-public (fund-contract (amount uint))
+  (stx-transfer? amount tx-sender (as-contract tx-sender))
+)
+
+;; Get contract balance
+(define-read-only (get-contract-balance)
+  (ok (stx-get-balance (as-contract tx-sender)))
 )

@@ -52,7 +52,7 @@
 
 ;; Get the current block timestamp
 (define-read-only (get-current-time)
-  stacks-block-time
+  stacks-block-height
 )
 
 ;; Calculate vested amount based on current time
@@ -61,7 +61,7 @@
     schedule
     (let
       (
-        (current-time stacks-block-time)
+        (current-time stacks-block-height)
         (start-time (get start-time schedule))
         (cliff-end (+ start-time (get cliff-duration schedule)))
         (vesting-end (+ start-time (get vesting-duration schedule)))
@@ -113,7 +113,7 @@
       {
         total-amount: total-amount,
         claimed-amount: u0,
-        start-time: stacks-block-time,
+        start-time: stacks-block-height,
         cliff-duration: cliff-duration,
         vesting-duration: vesting-duration,
         is-active: true
@@ -153,7 +153,7 @@
         )
         
         ;; Transfer tokens from contract to beneficiary
-        (try! (stx-transfer? available-amount current-contract beneficiary))
+        (try! (as-contract (stx-transfer? available-amount tx-sender beneficiary)))
         
         ;; Log claim event
         (log-vesting-event beneficiary available-amount "tokens-claimed")
@@ -179,7 +179,7 @@
   (let
     (
       (event-id (var-get event-counter))
-      (current-time stacks-block-time)
+      (current-time stacks-block-height)
     )
     (map-set vesting-events
       { event-id: event-id }
@@ -219,7 +219,7 @@
     schedule
     (let
       (
-        (current-time stacks-block-time)
+        (current-time stacks-block-height)
         (start-time (get start-time schedule))
         (vesting-end (+ start-time (get vesting-duration schedule)))
       )
@@ -236,7 +236,7 @@
 (define-read-only (is-cliff-passed (beneficiary principal))
   (match (map-get? vesting-schedules { beneficiary: beneficiary })
     schedule
-    (ok (>= stacks-block-time (+ (get start-time schedule) (get cliff-duration schedule))))
+    (ok (>= stacks-block-height (+ (get start-time schedule) (get cliff-duration schedule))))
     err-not-found
   )
 )
@@ -277,10 +277,10 @@
 
 ;; Fund the contract (anyone can fund it)
 (define-public (fund-contract (amount uint))
-  (stx-transfer? amount tx-sender current-contract)
+  (stx-transfer? amount tx-sender (as-contract tx-sender))
 )
 
 ;; Get contract balance
 (define-read-only (get-contract-balance)
-  (ok (stx-get-balance current-contract))
+  (ok (stx-get-balance (as-contract tx-sender)))
 )

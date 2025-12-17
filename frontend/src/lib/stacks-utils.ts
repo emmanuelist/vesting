@@ -4,8 +4,7 @@
  */
 
 import { 
-  standardPrincipalCV,
-  uintCV,
+  Cl,
   cvToValue,
   ClarityValue,
   cvToJSON,
@@ -168,9 +167,9 @@ export function formatDuration(blocks: number | bigint): string {
  * Create Clarity function arguments
  */
 export function createPrincipalArg(address: string) {
-  return standardPrincipalCV(address);
+  return Cl.principal(address);
 }
 
 export function createUintArg(value: number | bigint) {
-  return uintCV(value);
+  return Cl.uint(value);
 }

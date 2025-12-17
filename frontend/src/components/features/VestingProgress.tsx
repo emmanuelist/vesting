@@ -2,35 +2,95 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, TrendingUp, Lock, Unlock, ArrowRight } from "lucide-react";
+import { Clock, TrendingUp, Lock, Unlock, ArrowRight, Loader2 } from "lucide-react";
 import { ClaimConfirmationModal } from "@/components/modals/ClaimConfirmationModal";
+import { useWallet } from "@/contexts/WalletContext";
+import { useVestingData, useClaimTokens } from "@/hooks/useVestingData";
+import { microStxToStx, formatDuration, blocksToTime } from "@/lib/stacks-utils";
+import { useToast } from "@/hooks/use-toast";
 
 interface VestingProgressProps {
-  totalAllocated: number;
-  currentlyVested: number;
-  availableToClaim: number;
-  stillLocked: number;
-  cliffDate: string;
-  endDate: string;
-  isCliffPassed: boolean;
+  beneficiaryAddress?: string; // Optional override for viewing other addresses
 }
 
-export function VestingProgress({
-  totalAllocated = 250000,
-  currentlyVested = 125000,
-  availableToClaim = 45000,
-  stillLocked = 125000,
-  cliffDate = "Jun 2024",
-  endDate = "May 2026",
-  isCliffPassed = true,
-}: Partial<VestingProgressProps>) {
+export function VestingProgress({ beneficiaryAddress }: VestingProgressProps) {
   const [claimModalOpen, setClaimModalOpen] = useState(false);
-  const progressPercentage = (currentlyVested / totalAllocated) * 100;
+  const { userAddress } = useWallet();
+  const { toast } = useToast();
+  
+  // Use provided address or user's address
+  const targetAddress = beneficiaryAddress || userAddress;
+  
+  // Fetch vesting data from blockchain
+  const { schedule, vestedAmount, progress, cliffPassed, isLoading, refetch } = 
+    useVestingData(targetAddress);
+  
+  // Claim mutation
+  const claimMutation = useClaimTokens();
+
+  // Calculate display values
+  const totalAllocated = schedule ? Number(microStxToStx(schedule.totalAmount)) : 0;
+  const claimedAmount = schedule ? Number(microStxToStx(schedule.claimedAmount)) : 0;
+  const availableToClaim = vestedAmount ? Number(microStxToStx(vestedAmount)) : 0;
+  const currentlyVested = claimedAmount + availableToClaim;
+  const stillLocked = totalAllocated - currentlyVested;
+  const progressPercentage = progress || 0;
+  
+  // Calculate dates from block heights
+  const cliffDate = schedule 
+    ? formatDuration(schedule.cliffDuration)
+    : "N/A";
+  const endDate = schedule 
+    ? formatDuration(schedule.vestingDuration)
+    : "N/A";
 
   const handleClaim = async () => {
-    // Simulate transaction
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      const txId = await claimMutation.mutateAsync();
+      toast({
+        title: "Claim successful",
+        description: `Transaction submitted: ${txId.slice(0, 8)}...`,
+      });
+      
+      // Refetch data after claim
+      setTimeout(() => refetch(), 2000);
+    } catch (error: any) {
+      toast({
+        title: "Claim failed",
+        description: error.message || "Failed to claim tokens",
+        variant: "destructive",
+      });
+    }
   };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <Card variant="glow" className="p-5 relative overflow-hidden">
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </Card>
+    );
+  }
+
+  // Show no schedule message
+  if (!schedule || !schedule.isActive) {
+    return (
+      <Card variant="glow" className="p-5 relative overflow-hidden">
+        <div className="text-center py-10">
+          <Lock className="w-12 h-12 mx-auto mb-3 text-muted-foreground" />
+          <h3 className="text-lg font-semibold mb-1">No Active Vesting Schedule</h3>
+          <p className="text-sm text-muted-foreground">
+            {targetAddress 
+              ? "This address doesn't have an active vesting schedule"
+              : "Connect your wallet to view your vesting schedule"
+            }
+          </p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -124,12 +184,32 @@ export function VestingProgress({
               variant="hero"
               size="lg"
               className="w-full"
-              disabled={availableToClaim === 0 || !isCliffPassed}
+              disabled={availableToClaim === 0 || !cliffPassed || claimMutation.isPending}
               onClick={() => setClaimModalOpen(true)}
             >
-              <span>Claim {availableToClaim.toLocaleString()} STX</span>
-              <ArrowRight className="w-4 h-4" />
+              {claimMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <>
+                  <span>Claim {availableToClaim.toLocaleString()} STX</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </Button>
+            
+            {!cliffPassed && (
+              <p className="text-xs text-center text-muted-foreground mt-2">
+                Cliff period has not passed yet
+              </p>
+            )}
+            {cliffPassed && availableToClaim === 0 && (
+              <p className="text-xs text-center text-muted-foreground mt-2">
+                No tokens available to claim at this time
+              </p>
+            )}
           </div>
         </Card>
       </motion.div>

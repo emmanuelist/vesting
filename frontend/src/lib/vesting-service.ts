@@ -4,18 +4,16 @@
  */
 
 import {
-  callReadOnlyFunction,
+  cvToValue,
+  fetchCallReadOnlyFunction,
   makeContractCall,
   broadcastTransaction,
   AnchorMode,
   PostConditionMode,
-  FungibleConditionCode,
-  makeStandardSTXPostCondition,
+  Pc,
   ClarityValue,
-  standardPrincipalCV,
-  uintCV,
+  Cl,
 } from '@stacks/transactions';
-import { StacksNetwork } from '@stacks/network';
 import { openContractCall } from '@stacks/connect';
 import { 
   CONTRACT_ADDRESS, 
@@ -43,7 +41,7 @@ export async function getVestingSchedule(
   beneficiary: string
 ): Promise<VestingSchedule | null> {
   try {
-    const result = await callReadOnlyFunction({
+    const result = await fetchCallReadOnlyFunction({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'get-vesting-schedule',
@@ -66,7 +64,7 @@ export async function calculateVestedAmount(
   beneficiary: string
 ): Promise<bigint> {
   try {
-    const result = await callReadOnlyFunction({
+    const result = await fetchCallReadOnlyFunction({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'calculate-vested-amount',
@@ -89,7 +87,7 @@ export async function getVestingProgress(
   beneficiary: string
 ): Promise<number> {
   try {
-    const result = await callReadOnlyFunction({
+    const result = await fetchCallReadOnlyFunction({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'get-vesting-progress',
@@ -112,7 +110,7 @@ export async function isCliffPassed(
   beneficiary: string
 ): Promise<boolean> {
   try {
-    const result = await callReadOnlyFunction({
+    const result = await fetchCallReadOnlyFunction({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'is-cliff-passed',
@@ -133,7 +131,7 @@ export async function isCliffPassed(
  */
 export async function getContractBalance(): Promise<bigint> {
   try {
-    const result = await callReadOnlyFunction({
+    const result = await fetchCallReadOnlyFunction({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'get-contract-balance',
@@ -153,7 +151,7 @@ export async function getContractBalance(): Promise<bigint> {
  */
 export async function getTotalSchedules(): Promise<number> {
   try {
-    const result = await callReadOnlyFunction({
+    const result = await fetchCallReadOnlyFunction({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'get-total-schedules',
@@ -173,7 +171,7 @@ export async function getTotalSchedules(): Promise<number> {
  */
 export async function getCurrentTime(): Promise<bigint> {
   try {
-    const result = await callReadOnlyFunction({
+    const result = await fetchCallReadOnlyFunction({
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'get-current-time',
@@ -298,11 +296,9 @@ export async function fundContract(
     const amountMicroStx = stxToMicroStx(options.amount);
 
     // Add post condition to ensure correct amount is transferred
-    const postCondition = makeStandardSTXPostCondition(
-      options.senderAddress,
-      FungibleConditionCode.Equal,
-      amountMicroStx
-    );
+    const postCondition = Pc.principal(options.senderAddress)
+      .willSendEq(amountMicroStx)
+      .ustx();
 
     await openContractCall({
       network: NETWORK,

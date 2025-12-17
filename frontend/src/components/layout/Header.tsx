@@ -13,7 +13,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useWallet } from "@/contexts/WalletContext";
-import { truncateAddress, getAddressUrl } from "@/lib/stacks-utils";
+import { truncateAddress } from "@/lib/stacks-utils";
+import { getAddressUrl } from "@/lib/stacks-config";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },

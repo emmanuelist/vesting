@@ -3,7 +3,7 @@
  * Configure network settings for different environments
  */
 
-import { StacksMainnet, StacksTestnet } from '@stacks/network';
+import { STACKS_MAINNET, STACKS_TESTNET } from '@stacks/network';
 
 // Contract deployment details
 export const CONTRACT_ADDRESS = 'SPHB047A30W99178TR7KE0784C2GV22070JTKX8';
@@ -11,16 +11,16 @@ export const CONTRACT_NAME = 'vesting';
 
 // Network configuration based on environment
 export const NETWORK = import.meta.env.VITE_NETWORK === 'mainnet' 
-  ? new StacksMainnet()
-  : new StacksTestnet();
+  ? STACKS_MAINNET
+  : STACKS_TESTNET;
 
 // Explorer URLs
-export const EXPLORER_URL = NETWORK.isMainnet() 
+export const EXPLORER_URL = NETWORK.chainId === 1
   ? 'https://explorer.stacks.co' 
   : 'https://explorer.hiro.so';
 
 // API endpoints
-export const API_URL = NETWORK.isMainnet()
+export const API_URL = NETWORK.chainId === 1
   ? 'https://api.mainnet.hiro.so'
   : 'https://api.testnet.hiro.so';
 
@@ -36,12 +36,12 @@ export const APP_DETAILS = {
  * Helper to get transaction URL
  */
 export function getTransactionUrl(txId: string): string {
-  return `${EXPLORER_URL}/txid/${txId}?chain=${NETWORK.isMainnet() ? 'mainnet' : 'testnet'}`;
+  return `${EXPLORER_URL}/txid/${txId}?chain=${NETWORK.chainId === 1 ? 'mainnet' : 'testnet'}`;
 }
 
 /**
  * Helper to get address URL
  */
 export function getAddressUrl(address: string): string {
-  return `${EXPLORER_URL}/address/${address}?chain=${NETWORK.isMainnet() ? 'mainnet' : 'testnet'}`;
+  return `${EXPLORER_URL}/address/${address}?chain=${NETWORK.chainId === 1 ? 'mainnet' : 'testnet'}`;
 }

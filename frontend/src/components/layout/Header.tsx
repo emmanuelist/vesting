@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { useWallet } from "@/contexts/WalletContext";
+import { truncateAddress, getAddressUrl } from "@/lib/stacks-utils";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -20,22 +22,41 @@ const navItems = [
 ];
 
 export function Header() {
-  const [isConnected, setIsConnected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { toast } = useToast();
-  const walletAddress = "SP2A7TKX8BQRS4NM9JDPV5Z1K3XYZW7890MNOPQR";
+  
+  // Use real wallet connection
+  const { isConnected, userAddress, connect, disconnect, isConnecting } = useWallet();
 
   const handleCopyAddress = () => {
-    navigator.clipboard.writeText(walletAddress);
-    toast({
-      title: "Address copied",
-      description: "Wallet address copied to clipboard",
-    });
+    if (userAddress) {
+      navigator.clipboard.writeText(userAddress);
+      toast({
+        title: "Address copied",
+        description: "Wallet address copied to clipboard",
+      });
+    }
+  };
+
+  const handleConnect = async () => {
+    try {
+      await connect();
+      toast({
+        title: "Wallet connected",
+        description: "Successfully connected to your Stacks wallet",
+      });
+    } catch (error) {
+      toast({
+        title: "Connection failed",
+        description: "Failed to connect wallet. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDisconnect = () => {
-    setIsConnected(false);
+    disconnect();
     toast({
       title: "Wallet disconnected",
       description: "You have been disconnected from your wallet",
@@ -89,20 +110,20 @@ export function Header() {
 
           {/* Wallet Connection */}
           <div className="flex items-center gap-2">
-            {isConnected ? (
+            {isConnected && userAddress ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary/50 border border-border hover:bg-secondary/70 transition-colors">
                     <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
                     <span className="font-mono text-[10px] text-muted-foreground">
-                      {walletAddress.slice(0, 4)}...{walletAddress.slice(-5)}
+                      {truncateAddress(userAddress)}
                     </span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52 bg-background border-border">
                   <div className="px-3 py-2 border-b border-border/50">
                     <p className="text-[10px] text-muted-foreground mb-1">Connected Wallet</p>
-                    <p className="font-mono text-xs truncate">{walletAddress}</p>
+                    <p className="font-mono text-xs truncate">{userAddress}</p>
                   </div>
                   <DropdownMenuItem onClick={handleCopyAddress} className="gap-2 cursor-pointer">
                     <Copy className="w-3.5 h-3.5" />
@@ -110,7 +131,7 @@ export function Header() {
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <a 
-                      href={`https://explorer.stacks.co/address/${walletAddress}`}
+                      href={getAddressUrl(userAddress)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 cursor-pointer"
@@ -133,12 +154,17 @@ export function Header() {
               <Button 
                 variant="hero" 
                 size="sm"
-                onClick={() => setIsConnected(true)}
+                onClick={handleConnect}
+                disabled={isConnecting}
                 className="gap-1.5 h-8 text-xs"
               >
                 <Wallet className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Connect Wallet</span>
-                <span className="sm:hidden">Connect</span>
+                <span className="hidden sm:inline">
+                  {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                </span>
+                <span className="sm:hidden">
+                  {isConnecting ? '...' : 'Connect'}
+                </span>
               </Button>
             )}
 

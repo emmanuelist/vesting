@@ -11,6 +11,8 @@ import {
   isCliffPassed,
   getContractBalance,
   getTotalSchedules,
+  getBeneficiaryCount,
+  getVestingEvent,
   claimVestedTokens,
   createVestingSchedule,
   fundContract,
@@ -81,6 +83,10 @@ export function useContractBalance() {
     queryFn: getContractBalance,
     staleTime: 30_000,
     refetchInterval: 60_000,
+    retry: false, // Don't retry if contract doesn't exist
+    meta: {
+      errorMessage: 'Contract not deployed yet',
+    },
   });
 }
 
@@ -103,6 +109,13 @@ export function useVestingData(beneficiary: string | null) {
   const vestedAmount = useVestedAmount(beneficiary);
   const progress = useVestingProgress(beneficiary);
   const cliffPassed = useCliffStatus(beneficiary);
+  
+  // Check if contract is deployed
+  const contractNotDeployed = 
+    schedule.error?.message?.includes('NoSuchContract') ||
+    vestedAmount.error?.message?.includes('NoSuchContract') ||
+    progress.error?.message?.includes('NoSuchContract') ||
+    cliffPassed.error?.message?.includes('NoSuchContract');
 
   return {
     schedule: schedule.data,
@@ -113,6 +126,7 @@ export function useVestingData(beneficiary: string | null) {
                progress.isLoading || cliffPassed.isLoading,
     error: schedule.error || vestedAmount.error || 
            progress.error || cliffPassed.error,
+    contractNotDeployed,
     refetch: () => {
       schedule.refetch();
       vestedAmount.refetch();
@@ -210,6 +224,30 @@ export function useRevokeVesting() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vesting-schedule'] });
     },
+  });
+}
+
+/**
+ * Hook to get beneficiary count
+ */
+export function useBeneficiaryCount() {
+  return useQuery({
+    queryKey: ['beneficiary-count'],
+    queryFn: getBeneficiaryCount,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  });
+}
+
+/**
+ * Hook to get vesting event by ID
+ */
+export function useVestingEvent(eventId: number | null) {
+  return useQuery({
+    queryKey: ['vesting-event', eventId],
+    queryFn: () => eventId !== null ? getVestingEvent(eventId) : null,
+    enabled: eventId !== null,
+    staleTime: 300_000, // Events are immutable, cache for 5 minutes
   });
 }
 

@@ -20,8 +20,10 @@ import {
   BarChart,
   Bar
 } from "recharts";
-import { TrendingUp, TrendingDown, Users, Coins, Calendar } from "lucide-react";
+import { TrendingUp, TrendingDown, Users, Coins, Calendar, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useContractBalance, useTotalSchedules, useBeneficiaryCount } from "@/hooks/useVestingData";
+import { microStxToStx } from "@/lib/stacks-utils";
 
 interface AnalyticsModalProps {
   open: boolean;
@@ -77,16 +79,24 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export function AnalyticsModal({ open, onOpenChange }: AnalyticsModalProps) {
   const [timeframe, setTimeframe] = useState<"6m" | "1y" | "all">("6m");
   const { toast } = useToast();
+  
+  // Fetch real data
+  const { data: contractBalance, isLoading: balanceLoading } = useContractBalance();
+  const { data: totalSchedules, isLoading: schedulesLoading } = useTotalSchedules();
+  const { data: beneficiaryCount, isLoading: beneficiariesLoading } = useBeneficiaryCount();
+  
+  const isLoading = balanceLoading || schedulesLoading || beneficiariesLoading;
+  const tvl = contractBalance ? Number(microStxToStx(contractBalance)) : 0;
 
   const handleExportReport = () => {
     const report = {
       generatedAt: new Date().toISOString(),
       timeframe,
       summary: {
-        totalVested: 423000,
-        totalClaimed: 336000,
-        beneficiaries: 32,
-        avgDuration: "18 months",
+        totalValueLocked: tvl,
+        totalSchedules: totalSchedules || 0,
+        beneficiaries: beneficiaryCount || 0,
+        contractBalance: tvl,
       },
       statusDistribution: statusData,
       monthlyData,
@@ -109,12 +119,12 @@ export function AnalyticsModal({ open, onOpenChange }: AnalyticsModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto glass-card border-border/50">
+      <DialogContent className="max-w-[95vw] sm:max-w-[85vw] lg:max-w-4xl max-h-[90vh] overflow-y-auto glass-card border-border/50 p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">Analytics Overview</DialogTitle>
+          <DialogTitle className="text-base sm:text-lg font-semibold">Analytics Overview</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
+        <div className="space-y-3 sm:space-y-4 pt-2">
           {/* Time Filter */}
           <div className="flex gap-1 p-0.5 rounded-lg bg-secondary/50 border border-border w-fit">
             {(["6m", "1y", "all"] as const).map((tf) => (
@@ -134,52 +144,46 @@ export function AnalyticsModal({ open, onOpenChange }: AnalyticsModalProps) {
           </div>
 
           {/* Summary Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="p-3 rounded-lg bg-secondary/30 border border-border/50">
-              <div className="flex items-center gap-2 mb-1">
-                <Coins className="w-3.5 h-3.5 text-primary" />
-                <span className="label-caps text-[10px]">Total Vested</span>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Coins className="w-3.5 h-3.5 text-primary" />
+                  <span className="label-caps text-[10px]">Total Value Locked</span>
+                </div>
+                <p className="font-mono text-lg font-semibold">{tvl.toLocaleString()} STX</p>
+                <span className="text-[10px] text-muted-foreground">Live data</span>
               </div>
-              <p className="font-mono text-lg font-semibold">423K STX</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <TrendingUp className="w-3 h-3 text-success" />
-                <span className="text-[10px] text-success">+15.3%</span>
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Calendar className="w-3.5 h-3.5 text-accent" />
+                  <span className="label-caps text-[10px]">Active Schedules</span>
+                </div>
+                <p className="font-mono text-lg font-semibold">{totalSchedules || 0}</p>
+                <span className="text-[10px] text-muted-foreground">Live data</span>
+              </div>
+              <div className="p-3 rounded-lg bg-secondary/30 border border-border/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="label-caps text-[10px]">Beneficiaries</span>
+                </div>
+                <p className="font-mono text-lg font-semibold">{beneficiaryCount || 0}</p>
+                <span className="text-[10px] text-muted-foreground">Live data</span>
+              </div>
+            <div className="p-3 rounded-lg bg-secondary/30 border border-border/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Coins className="w-3.5 h-3.5 text-warning" />
+                  <span className="label-caps text-[10px]">Contract Balance</span>
+                </div>
+                <p className="font-mono text-lg font-semibold">${(tvl * 1.93).toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                <span className="text-[10px] text-muted-foreground">USD equivalent</span>
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-secondary/30 border border-border/50">
-              <div className="flex items-center gap-2 mb-1">
-                <Coins className="w-3.5 h-3.5 text-accent" />
-                <span className="label-caps text-[10px]">Total Claimed</span>
-              </div>
-              <p className="font-mono text-lg font-semibold">336K STX</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <TrendingUp className="w-3 h-3 text-success" />
-                <span className="text-[10px] text-success">+22.1%</span>
-              </div>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary/30 border border-border/50">
-              <div className="flex items-center gap-2 mb-1">
-                <Users className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="label-caps text-[10px]">Beneficiaries</span>
-              </div>
-              <p className="font-mono text-lg font-semibold">32</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <TrendingUp className="w-3 h-3 text-success" />
-                <span className="text-[10px] text-success">+4</span>
-              </div>
-            </div>
-            <div className="p-3 rounded-lg bg-secondary/30 border border-border/50">
-              <div className="flex items-center gap-2 mb-1">
-                <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="label-caps text-[10px]">Avg Duration</span>
-              </div>
-              <p className="font-mono text-lg font-semibold">18 mo</p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <TrendingDown className="w-3 h-3 text-muted-foreground" />
-                <span className="text-[10px] text-muted-foreground">-2 mo</span>
-              </div>
-            </div>
-          </div>
+          )}
 
           {/* Charts Row */}
           <div className="grid md:grid-cols-2 gap-4">

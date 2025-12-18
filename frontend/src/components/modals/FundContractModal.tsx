@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Wallet,
   ArrowRight,
@@ -19,6 +20,11 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWallet } from "@/contexts/WalletContext";
+import { useFundContract, useContractBalance } from "@/hooks/useVestingData";
+import { CONTRACT_ADDRESS, getTransactionUrl, API_URL } from "@/lib/stacks-config";
+import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 
 type ModalState = "form" | "processing" | "success";
 
@@ -26,6 +32,24 @@ interface FundContractModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onFund: (amount: number) => Promise<void>;
+}
+
+/**
+ * Fetch wallet STX balance from Stacks API
+ */
+async function fetchWalletBalance(address: string): Promise<number> {
+  try {
+    const response = await fetch(`${API_URL}/extended/v1/address/${address}/stx`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch wallet balance');
+    }
+    const data = await response.json();
+    // Convert from micro-STX to STX
+    return Number(data.balance) / 1_000_000;
+  } catch (error) {
+    console.error('Error fetching wallet balance:', error);
+    return 0;
+  }
 }
 
 export function FundContractModal({
@@ -36,11 +60,25 @@ export function FundContractModal({
   const [state, setState] = useState<ModalState>("form");
   const [amount, setAmount] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const [txId, setTxId] = useState<string>("");
+  
+  const { userAddress, isConnected } = useWallet();
+  const { toast } = useToast();
+  const fundMutation = useFundContract();
+  const { data: contractBalanceData, isLoading: balanceLoading } = useContractBalance();
+  
+  // Fetch wallet balance from Stacks API
+  const { data: walletBalanceData, isLoading: walletLoading } = useQuery({
+    queryKey: ['wallet-balance', userAddress],
+    queryFn: () => userAddress ? fetchWalletBalance(userAddress) : Promise.resolve(0),
+    enabled: !!userAddress && isConnected,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
 
-  // Mock data
-  const walletBalance = 15000;
-  const contractAddress = "SP2ABC...7TKX8";
-  const currentContractBalance = 125000;
+  // Real data from blockchain
+  const walletBalance = walletBalanceData || 0;
+  const contractAddress = CONTRACT_ADDRESS;
+  const currentContractBalance = contractBalanceData ? Number(contractBalanceData) / 1_000_000 : 0;
   const minDeposit = 100;
 
   const numericAmount = parseFloat(amount) || 0;
@@ -59,13 +97,71 @@ export function FundContractModal({
   };
 
   const handleFund = async () => {
-    if (!isValidAmount) return;
+    // Pre-validation checks
+    if (!isConnected || !userAddress) {
+      toast({
+        title: "Wallet Not Connected",
+        description: "Please connect your wallet to fund the contract",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isValidAmount) {
+      toast({
+        title: "Invalid Amount",
+        description: isInsufficientBalance 
+          ? `Insufficient balance. You have ${walletBalance.toFixed(2)} STX`
+          : `Minimum deposit is ${minDeposit} STX`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setState("processing");
     try {
-      await onFund(numericAmount);
+      const txHash = await fundMutation.mutateAsync({
+        amount: numericAmount,
+        senderAddress: userAddress,
+      });
+      setTxId(txHash);
       setState("success");
-    } catch (error) {
+      toast({
+        title: "Contract Funded Successfully! 🎉",
+        description: `Added ${numericAmount.toLocaleString()} STX to the contract`,
+      });
+      await onFund(numericAmount);
+    } catch (error: any) {
       setState("form");
+      console.error('Fund contract error:', error);
+      
+      const errorMessage = error.message || error.toString();
+      
+      // Categorize errors for better user feedback
+      let title = "Failed to Fund Contract";
+      let description = "Transaction failed. Please try again.";
+      
+      if (errorMessage.includes('User rejected') || errorMessage.includes('cancelled')) {
+        title = "Transaction Cancelled";
+        description = "You cancelled the transaction in your wallet";
+      } else if (errorMessage.includes('Insufficient')) {
+        title = "Insufficient Balance";
+        description = `You need at least ${numericAmount.toLocaleString()} STX plus gas fees`;
+      } else if (errorMessage.includes('Unauthorized') || errorMessage.includes('owner')) {
+        title = "Unauthorized";
+        description = "Only the contract owner can perform this action";
+      } else if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+        title = "Network Error";
+        description = "Network connection issue. Please check your connection and try again";
+      } else if (errorMessage) {
+        description = errorMessage;
+      }
+      
+      toast({
+        title,
+        description,
+        variant: "destructive",
+      });
     }
   };
 
@@ -79,7 +175,7 @@ export function FundContractModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border-border/50">
+      <DialogContent className="max-w-[95vw] sm:max-w-md bg-card/95 backdrop-blur-xl border-border/50 p-4 sm:p-6">
         <AnimatePresence mode="wait">
           {state === "form" && (
             <motion.div
@@ -98,14 +194,14 @@ export function FundContractModal({
               <div className="mt-4 space-y-4">
                 {/* Contract Info */}
                 <Card variant="glass" className="p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                       <span className="label-caps text-[10px]">Contract Address</span>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="font-mono text-sm">{contractAddress}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="font-mono text-xs truncate">{contractAddress}</span>
                         <button
                           onClick={handleCopyAddress}
-                          className="p-1 rounded hover:bg-secondary transition-colors"
+                          className="p-1 rounded hover:bg-secondary transition-colors flex-shrink-0"
                         >
                           {copied ? (
                             <Check className="w-3 h-3 text-success" />
@@ -115,21 +211,63 @@ export function FundContractModal({
                         </button>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right flex-shrink-0">
                       <span className="label-caps text-[10px]">Current Balance</span>
-                      <p className="font-mono text-sm text-primary">
-                        {currentContractBalance.toLocaleString()} STX
+                      <p className="font-mono text-sm text-primary mt-1">
+                        {balanceLoading ? (
+                          <span className="flex items-center gap-1 justify-end">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Loading...
+                          </span>
+                        ) : (
+                          `${currentContractBalance.toLocaleString()} STX`
+                        )}
                       </p>
                     </div>
                   </div>
                 </Card>
+
+                {/* Warning Banners */}
+                {!isConnected && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Wallet not connected. Please connect your wallet to fund the contract.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {isConnected && walletLoading && (
+                  <Alert>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <AlertDescription>
+                      Loading wallet balance...
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {isConnected && !walletLoading && walletBalance === 0 && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Your wallet has no STX. Please add funds to your wallet first.
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 {/* Amount Input */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="label-caps text-[10px]">Deposit Amount</label>
                     <span className="text-xs text-muted-foreground">
-                      Balance: <span className="font-mono text-foreground">{walletBalance.toLocaleString()} STX</span>
+                      {walletLoading ? (
+                        <span className="flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          Loading...
+                        </span>
+                      ) : (
+                        <>Balance: <span className="font-mono text-foreground">{walletBalance.toLocaleString()} STX</span></>
+                      )}
                     </span>
                   </div>
                   <div className="relative">
@@ -138,6 +276,7 @@ export function FundContractModal({
                       placeholder="0.00"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
+                      disabled={!isConnected || walletLoading || walletBalance === 0}
                       className={cn(
                         "pr-20 font-mono text-lg h-11",
                         isInsufficientBalance && "border-destructive focus-visible:ring-destructive"
@@ -146,7 +285,8 @@ export function FundContractModal({
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
                       <button
                         onClick={handleMax}
-                        className="px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 rounded transition-colors"
+                        disabled={!isConnected || walletLoading || walletBalance === 0}
+                        className="px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         MAX
                       </button>
@@ -198,10 +338,19 @@ export function FundContractModal({
                   variant="hero"
                   className="flex-1 gap-2"
                   onClick={handleFund}
-                  disabled={!isValidAmount}
+                  disabled={!isConnected || walletLoading || !isValidAmount || fundMutation.isPending}
                 >
-                  Fund Contract
-                  <ArrowRight className="w-4 h-4" />
+                  {fundMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      Fund Contract
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </Button>
               </div>
             </motion.div>
@@ -251,6 +400,18 @@ export function FundContractModal({
               <p className="mt-2 text-sm text-muted-foreground">
                 Contract funded successfully
               </p>
+              
+              {txId && (
+                <a
+                  href={getTransactionUrl(txId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  View transaction
+                  <ArrowRight className="w-3 h-3" />
+                </a>
+              )}
 
               <Button variant="hero" className="mt-5 w-full" onClick={handleClose}>
                 Done

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   CheckCircle,
   ExternalLink,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -27,36 +28,11 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-
-// Mock schedule data
-const scheduleData = {
-  id: "1",
-  beneficiary: "SP2ABC123DEF456GHI789JKL012MNO345PQR678STU",
-  beneficiaryShort: "SP2ABC...8STU",
-  totalAllocation: 100000,
-  vestedAmount: 45000,
-  claimedAmount: 30000,
-  availableToClaim: 15000,
-  lockedAmount: 55000,
-  status: "active" as const,
-  createdAt: "Jan 15, 2024",
-  cliffDate: "Jul 15, 2024",
-  endDate: "Jan 15, 2026",
-  cliffPassed: true,
-  vestingProgress: 45,
-};
-
-const vestingChartData = [
-  { month: "Jan 24", vested: 0, locked: 100000 },
-  { month: "Apr 24", vested: 0, locked: 100000 },
-  { month: "Jul 24", vested: 25000, locked: 75000 },
-  { month: "Oct 24", vested: 37500, locked: 62500 },
-  { month: "Jan 25", vested: 50000, locked: 50000 },
-  { month: "Apr 25", vested: 62500, locked: 37500 },
-  { month: "Jul 25", vested: 75000, locked: 25000 },
-  { month: "Oct 25", vested: 87500, locked: 12500 },
-  { month: "Jan 26", vested: 100000, locked: 0 },
-];
+import { useWallet } from "@/contexts/WalletContext";
+import { useVestingData, useClaimTokens, useRevokeVesting } from "@/hooks/useVestingData";
+import { microStxToStx, truncateAddress } from "@/lib/stacks-utils";
+import { useToast } from "@/hooks/use-toast";
+import { getTransactionUrl } from "@/lib/stacks-config";
 
 const claimHistory = [
   { id: "1", amount: 15000, date: "Dec 10, 2024", txHash: "0x1a2b...3c4d", status: "confirmed" },
@@ -75,17 +51,126 @@ export default function ScheduleDetail() {
   const { id } = useParams();
   const [copied, setCopied] = useState(false);
   const [revokeModalOpen, setRevokeModalOpen] = useState(false);
+  const { userAddress, isConnected } = useWallet();
+  const { toast } = useToast();
+  
+  // Use the id from URL as beneficiary address, or default to user's address
+  const beneficiaryAddress = id || userAddress;
+  
+  // Fetch vesting data
+  const { schedule, vestedAmount, progress, cliffPassed, isLoading, refetch } = 
+    useVestingData(beneficiaryAddress);
+  
+  // Claim and revoke mutations
+  const claimMutation = useClaimTokens();
+  const revokeMutation = useRevokeVesting();
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(scheduleData.beneficiary);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (beneficiaryAddress) {
+      navigator.clipboard.writeText(beneficiaryAddress);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast({
+        title: "Address copied",
+        description: "Beneficiary address copied to clipboard",
+      });
+    }
+  };
+
+  const handleClaim = async () => {
+    try {
+      const txId = await claimMutation.mutateAsync();
+      toast({
+        title: "Claim successful",
+        description: `Transaction: ${txId.slice(0, 8)}...`,
+      });
+      setTimeout(() => refetch(), 2000);
+    } catch (error: any) {
+      toast({
+        title: "Claim failed",
+        description: error.message || "Failed to claim tokens",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleRevoke = async (reason: string) => {
-    // Simulate revoke
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (!beneficiaryAddress) return;
+    
+    try {
+      const txId = await revokeMutation.mutateAsync({
+        beneficiary: beneficiaryAddress,
+      });
+      
+      toast({
+        title: "Schedule revoked",
+        description: `Transaction: ${txId.slice(0, 8)}...`,
+      });
+      
+      // Refetch data after revoke
+      setTimeout(() => refetch(), 2000);
+    } catch (error: any) {
+      toast({
+        title: "Failed to revoke schedule",
+        description: error.message || "An error occurred",
+        variant: "destructive",
+      });
+    }
   };
+  
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen">
+        <Header />
+        <main className="pt-20 pb-10 px-4">
+          <div className="container mx-auto max-w-6xl flex items-center justify-center py-20">
+            <Loader2 className="w-12 h-12 animate-spin text-primary" />
+          </div>
+        </main>
+      </div>
+    );
+  }
+  
+  // Redirect if no schedule found
+  if (!schedule || !schedule.isActive) {
+    return <Navigate to="/schedules" replace />;
+  }
+  
+  // Calculate display values
+  const totalAllocation = Number(microStxToStx(schedule.totalAmount));
+  const claimedAmount = Number(microStxToStx(schedule.claimedAmount));
+  const availableToClaim = vestedAmount ? Number(microStxToStx(vestedAmount)) : 0;
+  const currentlyVested = claimedAmount + availableToClaim;
+  const lockedAmount = totalAllocation - currentlyVested;
+  
+  const scheduleData = {
+    id: id || "current",
+    beneficiary: beneficiaryAddress || "",
+    beneficiaryShort: truncateAddress(beneficiaryAddress || ""),
+    totalAllocation,
+    vestedAmount: currentlyVested,
+    claimedAmount,
+    availableToClaim,
+    lockedAmount,
+    status: "active" as const,
+    createdAt: new Date(schedule.startTime * 1000).toLocaleDateString(),
+    cliffDate: `${Math.floor(schedule.cliffDuration / 144)} days`,
+    endDate: `${Math.floor(schedule.vestingDuration / 144)} days`,
+    cliffPassed: cliffPassed || false,
+    vestingProgress: progress || 0,
+  };
+  
+  // Generate chart data
+  const vestingChartData = Array.from({ length: 9 }, (_, i) => {
+    const progressPoint = (i / 8) * 100;
+    const vestedAtPoint = (totalAllocation * progressPoint) / 100;
+    return {
+      month: `Month ${i * 3}`,
+      vested: Math.round(vestedAtPoint),
+      locked: Math.round(totalAllocation - vestedAtPoint),
+    };
+  });
 
   return (
     <div className="min-h-screen">

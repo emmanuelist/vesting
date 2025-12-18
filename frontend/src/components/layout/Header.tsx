@@ -12,6 +12,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { useWallet } from "@/contexts/WalletContext";
+import { truncateAddress } from "@/lib/stacks-utils";
+import { getAddressUrl } from "@/lib/stacks-config";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -20,22 +23,41 @@ const navItems = [
 ];
 
 export function Header() {
-  const [isConnected, setIsConnected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const location = useLocation();
   const { toast } = useToast();
-  const walletAddress = "SP2A7TKX8BQRS4NM9JDPV5Z1K3XYZW7890MNOPQR";
+  
+  // Use real wallet connection
+  const { isConnected, userAddress, connect, disconnect, isConnecting } = useWallet();
 
   const handleCopyAddress = () => {
-    navigator.clipboard.writeText(walletAddress);
-    toast({
-      title: "Address copied",
-      description: "Wallet address copied to clipboard",
-    });
+    if (userAddress) {
+      navigator.clipboard.writeText(userAddress);
+      toast({
+        title: "Address copied",
+        description: "Wallet address copied to clipboard",
+      });
+    }
+  };
+
+  const handleConnect = async () => {
+    try {
+      await connect();
+      toast({
+        title: "Wallet connected",
+        description: "Successfully connected to your Stacks wallet",
+      });
+    } catch (error) {
+      toast({
+        title: "Connection failed",
+        description: "Failed to connect wallet. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDisconnect = () => {
-    setIsConnected(false);
+    disconnect();
     toast({
       title: "Wallet disconnected",
       description: "You have been disconnected from your wallet",
@@ -49,19 +71,19 @@ export function Header() {
       transition={{ duration: 0.5 }}
       className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl"
     >
-      <div className="container mx-auto px-4">
-        <div className="flex h-14 items-center justify-between">
+      <div className="container mx-auto px-3 sm:px-4">
+        <div className="flex h-12 sm:h-14 items-center justify-between">
           {/* Logo */}
-          <Link to="/" className="flex items-center gap-2.5 group">
+          <Link to="/" className="flex items-center gap-1.5 sm:gap-2.5 group">
             <div className="relative">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                <span className="font-mono font-bold text-primary-foreground text-base">V</span>
+              <div className="w-7 sm:w-8 h-7 sm:h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                <span className="font-mono font-bold text-primary-foreground text-sm sm:text-base">V</span>
               </div>
               <div className="absolute inset-0 rounded-lg bg-gradient-to-br from-primary to-accent opacity-50 blur-lg group-hover:opacity-75 transition-opacity" />
             </div>
-            <div className="hidden sm:block">
-              <span className="font-mono font-bold text-base text-foreground">VEST</span>
-              <span className="font-mono text-base text-muted-foreground">.protocol</span>
+            <div className="hidden xs:block">
+              <span className="font-mono font-bold text-sm sm:text-base text-foreground">VEST</span>
+              <span className="font-mono text-sm sm:text-base text-muted-foreground">.protocol</span>
             </div>
           </Link>
 
@@ -74,7 +96,7 @@ export function Header() {
                   key={item.href}
                   to={item.href}
                   className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+                    "flex items-center gap-1 lg:gap-1.5 px-2 lg:px-3 py-1.5 rounded-lg text-[10px] lg:text-xs font-medium transition-all duration-200",
                     isActive 
                       ? "bg-primary/10 text-primary" 
                       : "text-muted-foreground hover:text-foreground hover:bg-secondary"
@@ -88,21 +110,21 @@ export function Header() {
           </nav>
 
           {/* Wallet Connection */}
-          <div className="flex items-center gap-2">
-            {isConnected ? (
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {isConnected && userAddress ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary/50 border border-border hover:bg-secondary/70 transition-colors">
+                  <button className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg bg-secondary/50 border border-border hover:bg-secondary/70 transition-colors">
                     <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      {walletAddress.slice(0, 4)}...{walletAddress.slice(-5)}
+                    <span className="font-mono text-[9px] sm:text-[10px] text-muted-foreground">
+                      {truncateAddress(userAddress)}
                     </span>
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-52 bg-background border-border">
                   <div className="px-3 py-2 border-b border-border/50">
                     <p className="text-[10px] text-muted-foreground mb-1">Connected Wallet</p>
-                    <p className="font-mono text-xs truncate">{walletAddress}</p>
+                    <p className="font-mono text-xs truncate">{userAddress}</p>
                   </div>
                   <DropdownMenuItem onClick={handleCopyAddress} className="gap-2 cursor-pointer">
                     <Copy className="w-3.5 h-3.5" />
@@ -110,7 +132,7 @@ export function Header() {
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <a 
-                      href={`https://explorer.stacks.co/address/${walletAddress}`}
+                      href={getAddressUrl(userAddress)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-2 cursor-pointer"
@@ -133,12 +155,17 @@ export function Header() {
               <Button 
                 variant="hero" 
                 size="sm"
-                onClick={() => setIsConnected(true)}
+                onClick={handleConnect}
+                disabled={isConnecting}
                 className="gap-1.5 h-8 text-xs"
               >
                 <Wallet className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Connect Wallet</span>
-                <span className="sm:hidden">Connect</span>
+                <span className="hidden sm:inline">
+                  {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                </span>
+                <span className="sm:hidden">
+                  {isConnecting ? '...' : 'Connect'}
+                </span>
               </Button>
             )}
 

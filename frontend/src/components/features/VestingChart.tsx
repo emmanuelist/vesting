@@ -1,21 +1,43 @@
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { useWallet } from "@/contexts/WalletContext";
+import { useVestingData } from "@/hooks/useVestingData";
+import { microStxToStx } from "@/lib/stacks-utils";
+import { useMemo } from "react";
+import { Loader2 } from "lucide-react";
 
-const vestingData = [
-  { month: "Jan", vested: 0, locked: 250000 },
-  { month: "Feb", vested: 0, locked: 250000 },
-  { month: "Mar", vested: 0, locked: 250000 },
-  { month: "Apr", vested: 0, locked: 250000 },
-  { month: "May", vested: 0, locked: 250000 },
-  { month: "Jun", vested: 0, locked: 250000 },
-  { month: "Jul", vested: 41667, locked: 208333 },
-  { month: "Aug", vested: 83333, locked: 166667 },
-  { month: "Sep", vested: 125000, locked: 125000 },
-  { month: "Oct", vested: 166667, locked: 83333 },
-  { month: "Nov", vested: 208333, locked: 41667 },
-  { month: "Dec", vested: 250000, locked: 0 },
-];
+function generateVestingTimeline(schedule: any) {
+  if (!schedule) return [];
+  
+  const totalAmount = Number(microStxToStx(schedule.totalAmount));
+  const cliffMonths = Math.floor(Number(schedule.cliffDuration) / (144 * 30)); // Approximate months
+  const vestingMonths = Math.floor(Number(schedule.vestingDuration) / (144 * 30));
+  const monthlyVesting = totalAmount / vestingMonths;
+  
+  const timeline = [];
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  
+  for (let i = 0; i <= 12; i++) {
+    let vested = 0;
+    
+    if (i < cliffMonths) {
+      vested = 0;
+    } else if (i >= vestingMonths + cliffMonths) {
+      vested = totalAmount;
+    } else {
+      vested = monthlyVesting * (i - cliffMonths);
+    }
+    
+    timeline.push({
+      month: months[i % 12],
+      vested: Math.round(vested),
+      locked: Math.round(totalAmount - vested),
+    });
+  }
+  
+  return timeline;
+}
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -45,33 +67,72 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export function VestingChart() {
+  const { userAddress } = useWallet();
+  const { schedule, isLoading } = useVestingData(userAddress);
+  
+  const vestingData = useMemo(() => {
+    if (schedule) {
+      return generateVestingTimeline(schedule);
+    }
+    // Default sample data if no schedule
+    return [
+      { month: "M1", vested: 0, locked: 100000 },
+      { month: "M2", vested: 0, locked: 100000 },
+      { month: "M3", vested: 0, locked: 100000 },
+      { month: "M4", vested: 16667, locked: 83333 },
+      { month: "M5", vested: 33333, locked: 66667 },
+      { month: "M6", vested: 50000, locked: 50000 },
+      { month: "M7", vested: 66667, locked: 33333 },
+      { month: "M8", vested: 83333, locked: 16667 },
+      { month: "M9", vested: 100000, locked: 0 },
+    ];
+  }, [schedule]);
+
+  if (isLoading) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.3 }}
+      >
+        <Card variant="glass" className="p-3 sm:p-5">
+          <div className="flex items-center justify-center h-[250px] sm:h-[300px]">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        </Card>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
     >
-      <Card variant="glass" className="p-5">
-        <CardHeader className="p-0 pb-5">
-          <div className="flex items-center justify-between">
+      <Card variant="glass" className="p-3 sm:p-5">
+        <CardHeader className="p-0 pb-3 sm:pb-5">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
             <div>
-              <CardTitle className="text-lg font-semibold">Vesting Timeline</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Token distribution over time</p>
+              <CardTitle className="text-base sm:text-lg font-semibold">Vesting Timeline</CardTitle>
+              <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
+                {schedule ? "Your token distribution over time" : "Example vesting schedule"}
+              </p>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-primary" />
-                <span className="text-xs text-muted-foreground">Vested</span>
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-2 sm:w-3 h-2 sm:h-3 rounded-full bg-primary" />
+                <span className="text-[10px] sm:text-xs text-muted-foreground">Vested</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-accent" />
-                <span className="text-xs text-muted-foreground">Locked</span>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="w-2 sm:w-3 h-2 sm:h-3 rounded-full bg-accent" />
+                <span className="text-[10px] sm:text-xs text-muted-foreground">Locked</span>
               </div>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="h-[260px] w-full">
+          <div className="h-[220px] sm:h-[260px] w-full overflow-x-auto">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={vestingData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>

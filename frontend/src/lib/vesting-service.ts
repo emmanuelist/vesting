@@ -14,16 +14,16 @@ import {
   ClarityValue,
   Cl,
 } from '@stacks/transactions';
-import { openContractCall } from '@stacks/connect';
+import { request } from '@stacks/connect';
 import { 
   CONTRACT_ADDRESS, 
   CONTRACT_NAME, 
-  NETWORK,
-  APP_DETAILS 
+  NETWORK
 } from './stacks-config';
 import { 
   parseVestingSchedule, 
   extractResponseValue,
+  extractOptionalValue,
   VestingSchedule,
   stxToMicroStx,
   createPrincipalArg,
@@ -73,7 +73,12 @@ export async function calculateVestedAmount(
       senderAddress: beneficiary,
     });
 
-    return BigInt(extractResponseValue(result) || 0);
+    const value = extractResponseValue(result);
+    // Handle different response types
+    if (typeof value === 'bigint') return value;
+    if (typeof value === 'number') return BigInt(value);
+    if (typeof value === 'string') return BigInt(value);
+    return BigInt(0);
   } catch (error) {
     console.error('Error calculating vested amount:', error);
     return BigInt(0);
@@ -96,7 +101,12 @@ export async function getVestingProgress(
       senderAddress: beneficiary,
     });
 
-    return Number(extractResponseValue(result) || 0);
+    const value = extractResponseValue(result);
+    // Handle different response types
+    if (typeof value === 'number') return value;
+    if (typeof value === 'bigint') return Number(value);
+    if (typeof value === 'string') return Number(value);
+    return 0;
   } catch (error) {
     console.error('Error fetching vesting progress:', error);
     return 0;
@@ -135,11 +145,17 @@ export async function getContractBalance(): Promise<bigint> {
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'get-contract-balance',
+      functionArgs: [],
       network: NETWORK,
       senderAddress: CONTRACT_ADDRESS,
     });
 
-    return BigInt(extractResponseValue(result) || 0);
+    const value = extractResponseValue(result);
+    // Handle different response types
+    if (typeof value === 'bigint') return value;
+    if (typeof value === 'number') return BigInt(value);
+    if (typeof value === 'string') return BigInt(value);
+    return BigInt(0);
   } catch (error) {
     console.error('Error fetching contract balance:', error);
     return BigInt(0);
@@ -155,14 +171,41 @@ export async function getTotalSchedules(): Promise<number> {
       contractAddress: CONTRACT_ADDRESS,
       contractName: CONTRACT_NAME,
       functionName: 'get-total-schedules',
+      functionArgs: [],
       network: NETWORK,
       senderAddress: CONTRACT_ADDRESS,
     });
 
-    return Number(extractResponseValue(result) || 0);
+    const value = extractResponseValue(result);
+    // Handle different response types
+    if (typeof value === 'number') return value;
+    if (typeof value === 'bigint') return Number(value);
+    if (typeof value === 'string') return Number(value);
+    return 0;
   } catch (error) {
     console.error('Error fetching total schedules:', error);
     return 0;
+  }
+}
+
+/**
+ * Get vesting event by ID
+ */
+export async function getVestingEvent(eventId: number): Promise<any> {
+  try {
+    const result = await fetchCallReadOnlyFunction({
+      contractAddress: CONTRACT_ADDRESS,
+      contractName: CONTRACT_NAME,
+      functionName: 'get-vesting-event',
+      functionArgs: [createUintArg(eventId)],
+      network: NETWORK,
+      senderAddress: CONTRACT_ADDRESS,
+    });
+
+    return extractOptionalValue(result);
+  } catch (error) {
+    console.error('Error fetching vesting event:', error);
+    return null;
   }
 }
 
@@ -180,10 +223,40 @@ export async function getCurrentTime(): Promise<bigint> {
       senderAddress: CONTRACT_ADDRESS,
     });
 
-    return BigInt(extractResponseValue(result) || 0);
+    const value = extractResponseValue(result);
+    // Handle different response types
+    if (typeof value === 'bigint') return value;
+    if (typeof value === 'number') return BigInt(value);
+    if (typeof value === 'string') return BigInt(value);
+    return BigInt(0);
   } catch (error) {
     console.error('Error fetching current time:', error);
     return BigInt(0);
+  }
+}
+
+/**
+ * Get count of unique beneficiaries
+ */
+export async function getBeneficiaryCount(): Promise<number> {
+  try {
+    const result = await fetchCallReadOnlyFunction({
+      contractAddress: CONTRACT_ADDRESS,
+      contractName: CONTRACT_NAME,
+      functionName: 'get-beneficiary-count',
+      functionArgs: [],
+      network: NETWORK,
+      senderAddress: CONTRACT_ADDRESS,
+    });
+
+    const value = extractResponseValue(result);
+    if (typeof value === 'number') return value;
+    if (typeof value === 'bigint') return Number(value);
+    if (typeof value === 'string') return Number(value);
+    return 0;
+  } catch (error) {
+    console.error('Error fetching beneficiary count:', error);
+    return 0;
   }
 }
 
@@ -204,27 +277,18 @@ export async function claimVestedTokens(
   options?: ClaimTokensOptions
 ): Promise<void> {
   try {
-    await openContractCall({
-      network: NETWORK,
-      anchorMode: AnchorMode.Any,
-      contractAddress: CONTRACT_ADDRESS,
-      contractName: CONTRACT_NAME,
+    const response = await request('stx_callContract', {
+      contract: `${CONTRACT_ADDRESS}.${CONTRACT_NAME}`,
       functionName: 'claim-vested-tokens',
       functionArgs: [],
-      postConditionMode: PostConditionMode.Deny,
-      postConditions: [],
-      appDetails: APP_DETAILS,
-      onFinish: (data) => {
-        console.log('Transaction broadcast:', data.txId);
-        options?.onFinish?.(data);
-      },
-      onCancel: () => {
-        console.log('Transaction cancelled');
-        options?.onCancel?.();
-      },
+      network: NETWORK.chainId === 1 ? 'mainnet' : 'testnet',
     });
+    
+    console.log('Transaction broadcast:', response.txid);
+    options?.onFinish?.({ txId: response.txid });
   } catch (error) {
     console.error('Error claiming tokens:', error);
+    options?.onCancel?.();
     throw error;
   }
 }
@@ -248,11 +312,8 @@ export async function createVestingSchedule(
   try {
     const totalAmountMicroStx = stxToMicroStx(options.totalAmount);
 
-    await openContractCall({
-      network: NETWORK,
-      anchorMode: AnchorMode.Any,
-      contractAddress: CONTRACT_ADDRESS,
-      contractName: CONTRACT_NAME,
+    const response = await request('stx_callContract', {
+      contract: `${CONTRACT_ADDRESS}.${CONTRACT_NAME}`,
       functionName: 'create-vesting-schedule',
       functionArgs: [
         createPrincipalArg(options.beneficiary),
@@ -260,20 +321,14 @@ export async function createVestingSchedule(
         createUintArg(options.cliffDuration),
         createUintArg(options.vestingDuration),
       ],
-      postConditionMode: PostConditionMode.Deny,
-      postConditions: [],
-      appDetails: APP_DETAILS,
-      onFinish: (data) => {
-        console.log('Vesting schedule created:', data.txId);
-        options?.onFinish?.(data);
-      },
-      onCancel: () => {
-        console.log('Transaction cancelled');
-        options?.onCancel?.();
-      },
+      network: NETWORK.chainId === 1 ? 'mainnet' : 'testnet',
     });
+    
+    console.log('Vesting schedule created:', response.txid);
+    options?.onFinish?.({ txId: response.txid });
   } catch (error) {
     console.error('Error creating vesting schedule:', error);
+    options?.onCancel?.();
     throw error;
   }
 }
@@ -300,27 +355,19 @@ export async function fundContract(
       .willSendEq(amountMicroStx)
       .ustx();
 
-    await openContractCall({
-      network: NETWORK,
-      anchorMode: AnchorMode.Any,
-      contractAddress: CONTRACT_ADDRESS,
-      contractName: CONTRACT_NAME,
+    const response = await request('stx_callContract', {
+      contract: `${CONTRACT_ADDRESS}.${CONTRACT_NAME}`,
       functionName: 'fund-contract',
       functionArgs: [createUintArg(amountMicroStx)],
-      postConditionMode: PostConditionMode.Deny,
+      network: NETWORK.chainId === 1 ? 'mainnet' : 'testnet',
       postConditions: [postCondition],
-      appDetails: APP_DETAILS,
-      onFinish: (data) => {
-        console.log('Contract funded:', data.txId);
-        options?.onFinish?.(data);
-      },
-      onCancel: () => {
-        console.log('Transaction cancelled');
-        options?.onCancel?.();
-      },
     });
+    
+    console.log('Contract funded:', response.txid);
+    options?.onFinish?.({ txId: response.txid });
   } catch (error) {
     console.error('Error funding contract:', error);
+    options?.onCancel?.();
     throw error;
   }
 }
@@ -339,27 +386,18 @@ export async function revokeVesting(
   options: RevokeVestingOptions
 ): Promise<void> {
   try {
-    await openContractCall({
-      network: NETWORK,
-      anchorMode: AnchorMode.Any,
-      contractAddress: CONTRACT_ADDRESS,
-      contractName: CONTRACT_NAME,
+    const response = await request('stx_callContract', {
+      contract: `${CONTRACT_ADDRESS}.${CONTRACT_NAME}`,
       functionName: 'revoke-vesting',
       functionArgs: [createPrincipalArg(options.beneficiary)],
-      postConditionMode: PostConditionMode.Deny,
-      postConditions: [],
-      appDetails: APP_DETAILS,
-      onFinish: (data) => {
-        console.log('Vesting schedule revoked:', data.txId);
-        options?.onFinish?.(data);
-      },
-      onCancel: () => {
-        console.log('Transaction cancelled');
-        options?.onCancel?.();
-      },
+      network: NETWORK.chainId === 1 ? 'mainnet' : 'testnet',
     });
+    
+    console.log('Vesting schedule revoked:', response.txid);
+    options?.onFinish?.({ txId: response.txid });
   } catch (error) {
     console.error('Error revoking vesting:', error);
+    options?.onCancel?.();
     throw error;
   }
 }
@@ -371,8 +409,11 @@ export async function checkTransactionStatus(
   txId: string
 ): Promise<'pending' | 'success' | 'failed'> {
   try {
+    const apiUrl = NETWORK.chainId === 1 
+      ? 'https://api.mainnet.hiro.so'
+      : 'https://api.testnet.hiro.so';
     const response = await fetch(
-      `${NETWORK.coreApiUrl}/extended/v1/tx/${txId}`
+      `${apiUrl}/extended/v1/tx/${txId}`
     );
     const data = await response.json();
 

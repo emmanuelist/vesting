@@ -38,7 +38,7 @@ export function StatCard({
       <Card 
         variant="glassHover" 
         className={cn(
-          "p-4 relative overflow-hidden",
+          "p-3 sm:p-4 relative overflow-hidden",
           variant === "primary" && "border-primary/30",
           variant === "accent" && "border-accent/30"
         )}
@@ -46,7 +46,7 @@ export function StatCard({
         {/* Glow Effect */}
         <div 
           className={cn(
-            "absolute top-0 right-0 w-24 h-24 rounded-full blur-3xl opacity-20",
+            "absolute top-0 right-0 w-20 sm:w-24 h-20 sm:h-24 rounded-full blur-3xl opacity-20",
             variant === "primary" && "bg-primary",
             variant === "accent" && "bg-accent",
             variant === "default" && "bg-muted"
@@ -55,23 +55,23 @@ export function StatCard({
         
         <div className="relative z-10">
           {/* Header */}
-          <div className="flex items-start justify-between mb-3">
-            <span className="label-caps text-[10px]">{label}</span>
+          <div className="flex items-start justify-between mb-2 sm:mb-3">
+            <span className="label-caps text-[9px] sm:text-[10px]">{label}</span>
             <div className={cn(
-              "p-1.5 rounded-lg",
+              "p-1 sm:p-1.5 rounded-lg",
               variant === "primary" && "bg-primary/10 text-primary",
               variant === "accent" && "bg-accent/10 text-accent",
               variant === "default" && "bg-secondary text-muted-foreground"
             )}>
-              <Icon className="w-4 h-4" />
+              <Icon className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
             </div>
           </div>
 
           {/* Value */}
           <div className="space-y-0.5">
-            <h3 className="stat-number text-xl">{value}</h3>
+            <h3 className="stat-number text-lg sm:text-xl">{value}</h3>
             {subValue && (
-              <p className="text-xs text-muted-foreground font-mono">{subValue}</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground font-mono">{subValue}</p>
             )}
           </div>
 

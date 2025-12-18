@@ -4,9 +4,12 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { showConnect, disconnect } from '@stacks/connect';
-import { AppConfig, UserSession } from '@stacks/connect';
-import { APP_DETAILS } from '@/lib/stacks-config';
+import { 
+  connect as stacksConnect, 
+  disconnect as stacksDisconnect,
+  isConnected as checkIsConnected,
+  getLocalStorage
+} from '@stacks/connect';
 
 interface WalletContextType {
   // Wallet state
@@ -24,10 +27,6 @@ interface WalletContextType {
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
-// Configure app for Stacks authentication
-const appConfig = new AppConfig(['store_write', 'publish_data']);
-const userSession = new UserSession({ appConfig });
-
 interface WalletProviderProps {
   children: React.ReactNode;
 }
@@ -39,48 +38,44 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const [isConnecting, setIsConnecting] = useState(false);
 
   /**
-   * Check if user is already authenticated on mount
+   * Check if user is already connected on mount
    */
   useEffect(() => {
-    if (userSession.isUserSignedIn()) {
-      const userData = userSession.loadUserData();
-      const profile = userData.profile;
-      
-      // Get STX address
-      const address = userData.profile.stxAddress.mainnet || 
-                      userData.profile.stxAddress.testnet;
-      
-      setIsConnected(true);
-      setUserAddress(address);
-      setStxAddress(address);
+    const connected = checkIsConnected();
+    if (connected) {
+      const data = getLocalStorage();
+      // addresses is an object with keys: stx, btc, etc.
+      // data.addresses.stx is an array of STX addresses
+      const address = data?.addresses?.stx?.[0]?.address;
+      if (address) {
+        setIsConnected(true);
+        setUserAddress(address);
+        setStxAddress(address);
+      }
     }
   }, []);
 
   /**
-   * Connect wallet using Stacks Connect
+   * Connect wallet using Stacks Connect v8.x
    */
   const connect = useCallback(async () => {
     try {
       setIsConnecting(true);
 
-      showConnect({
-        appDetails: APP_DETAILS,
-        redirectTo: '/',
-        onFinish: () => {
-          const userData = userSession.loadUserData();
-          const address = userData.profile.stxAddress.mainnet || 
-                          userData.profile.stxAddress.testnet;
-          
-          setIsConnected(true);
-          setUserAddress(address);
-          setStxAddress(address);
-          setIsConnecting(false);
-        },
-        onCancel: () => {
-          setIsConnecting(false);
-        },
-        userSession,
-      });
+      // Call connect which returns user's addresses
+      const response = await stacksConnect();
+      
+      // Extract STX address from response
+      // addresses is an object: { stx: [...], btc: [...] }
+      const address = response.addresses?.stx?.[0]?.address;
+      
+      if (address) {
+        setIsConnected(true);
+        setUserAddress(address);
+        setStxAddress(address);
+      }
+      
+      setIsConnecting(false);
     } catch (error) {
       console.error('Error connecting wallet:', error);
       setIsConnecting(false);
@@ -92,8 +87,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
    * Disconnect wallet
    */
   const disconnectWallet = useCallback(() => {
-    disconnect();
-    userSession.signUserOut();
+    stacksDisconnect();
     setIsConnected(false);
     setUserAddress(null);
     setStxAddress(null);

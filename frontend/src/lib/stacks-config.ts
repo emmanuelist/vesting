@@ -9,10 +9,13 @@ import { STACKS_MAINNET, STACKS_TESTNET } from '@stacks/network';
 export const CONTRACT_ADDRESS = 'SPHB047A30W99178TR7KE0784C2GV22070JTKX8';
 export const CONTRACT_NAME = 'vesting';
 
-// Network configuration based on environment
-export const NETWORK = import.meta.env.VITE_NETWORK === 'mainnet' 
-  ? STACKS_MAINNET
-  : STACKS_TESTNET;
+// Development mode - set to true if contract is not deployed yet
+export const IS_DEV_MODE = import.meta.env.VITE_DEV_MODE === 'true' || false;
+
+// Network configuration - Contract is deployed on MAINNET
+export const NETWORK = import.meta.env.VITE_NETWORK === 'testnet' 
+  ? STACKS_TESTNET
+  : STACKS_MAINNET; // Default to mainnet where contract is deployed
 
 // Explorer URLs
 export const EXPLORER_URL = NETWORK.chainId === 1

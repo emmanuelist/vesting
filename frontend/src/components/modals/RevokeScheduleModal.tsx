@@ -14,7 +14,11 @@ import {
   XCircle,
   CheckCircle2,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
+import { useRevokeVesting } from "@/hooks/useVestingData";
+import { useToast } from "@/hooks/use-toast";
+import { getTransactionUrl } from "@/lib/stacks-config";
 
 type ModalState = "confirm" | "processing" | "success";
 
@@ -37,14 +41,27 @@ export function RevokeScheduleModal({
 }: RevokeScheduleModalProps) {
   const [state, setState] = useState<ModalState>("confirm");
   const [reason, setReason] = useState("");
+  const [txId, setTxId] = useState<string>("");
+  
+  const { toast } = useToast();
+  const revokeMutation = useRevokeVesting();
 
   const handleRevoke = async () => {
     setState("processing");
     try {
-      await onRevoke(reason);
+      const txHash = await revokeMutation.mutateAsync({
+        beneficiary,
+      });
+      setTxId(txHash);
       setState("success");
-    } catch (error) {
+      await onRevoke(reason);
+    } catch (error: any) {
       setState("confirm");
+      toast({
+        title: "Failed to revoke schedule",
+        description: error.message || "Transaction failed",
+        variant: "destructive",
+      });
     }
   };
 
@@ -173,6 +190,18 @@ export function RevokeScheduleModal({
               <p className="mt-2 text-sm text-muted-foreground text-center">
                 {remainingAmount.toLocaleString()} STX returned to contract
               </p>
+              
+              {txId && (
+                <a
+                  href={getTransactionUrl(txId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  View transaction
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
 
               <Button variant="hero" className="mt-5 w-full" onClick={handleClose}>
                 Done

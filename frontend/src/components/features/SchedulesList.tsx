@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, ExternalLink, User, Copy, XCircle } from "lucide-react";
+import { MoreHorizontal, ExternalLink, User, Copy, XCircle, Loader2, AlertCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,9 @@ import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { RevokeScheduleModal } from "@/components/modals/RevokeScheduleModal";
+import { useWallet } from "@/contexts/WalletContext";
+import { useVestingData } from "@/hooks/useVestingData";
+import { microStxToStx, truncateAddress } from "@/lib/stacks-utils";
 
 interface Schedule {
   id: string;
@@ -26,16 +29,7 @@ interface Schedule {
   endDate: string;
 }
 
-const schedules: Schedule[] = [
-  {
-    id: "1",
-    beneficiary: "SP2ABC...4XYZ",
-    amount: 50000,
-    progress: 65,
-    status: "active",
-    cliffDate: "Mar 2024",
-    endDate: "Mar 2026",
-  },
+const placeholderSchedules: Schedule[] = [
   {
     id: "2",
     beneficiary: "SP3DEF...7UVW",
@@ -54,15 +48,6 @@ const schedules: Schedule[] = [
     cliffDate: "Jan 2023",
     endDate: "Jan 2025",
   },
-  {
-    id: "4",
-    beneficiary: "SP5JKL...2MNO",
-    amount: 25000,
-    progress: 0,
-    status: "pending",
-    cliffDate: "Dec 2024",
-    endDate: "Dec 2026",
-  },
 ];
 
 const statusColors = {
@@ -76,6 +61,26 @@ export function SchedulesList() {
   const [revokeModalOpen, setRevokeModalOpen] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState<Schedule | null>(null);
   const { toast } = useToast();
+  const { userAddress, isConnected } = useWallet();
+  
+  // Fetch user's vesting data
+  const { schedule, progress, isLoading } = useVestingData(userAddress);
+  
+  // Convert blockchain schedule to display format
+  const userSchedule: Schedule | null = schedule && schedule.isActive ? {
+    id: schedule.beneficiary,
+    beneficiary: truncateAddress(schedule.beneficiary),
+    amount: Number(microStxToStx(schedule.totalAmount)),
+    progress: progress || 0,
+    status: progress && progress >= 100 ? "completed" : "active",
+    cliffDate: `${Math.floor(schedule.cliffDuration / 144)} days`,
+    endDate: `${Math.floor(schedule.vestingDuration / 144)} days`,
+  } : null;
+  
+  // Combine user's schedule with placeholders
+  const schedules = userSchedule 
+    ? [userSchedule, ...placeholderSchedules]
+    : placeholderSchedules;
 
   const handleCopyAddress = (address: string) => {
     navigator.clipboard.writeText(address);
@@ -93,6 +98,27 @@ export function SchedulesList() {
   const handleConfirmRevoke = async (reason?: string) => {
     await new Promise((resolve) => setTimeout(resolve, 2000));
   };
+  
+  if (isLoading) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.4 }}
+      >
+        <Card variant="glass">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Active Schedules</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-3">
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    );
+  }
 
   return (
     <>

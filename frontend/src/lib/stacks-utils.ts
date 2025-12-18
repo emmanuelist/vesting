@@ -62,9 +62,14 @@ export function formatStxAmount(microStx: number | bigint, decimals = 2): string
  */
 export function parseClarityValue(value: ClarityValue): any {
   try {
-    return cvToValue(value, true);
+    const result = cvToValue(value, true);
+    // Debug log for development
+    if (import.meta.env.DEV) {
+      console.debug('Parsed Clarity value:', { type: value.type, result });
+    }
+    return result;
   } catch (error) {
-    console.error('Error parsing Clarity value:', error);
+    console.error('Error parsing Clarity value:', error, value);
     return null;
   }
 }

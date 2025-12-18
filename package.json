@@ -7,7 +7,14 @@
   "scripts": {
     "test": "vitest run",
     "test:report": "vitest run -- --coverage --costs",
-    "test:watch": "chokidar \"tests/**/*.ts\" \"contracts/**/*.clar\" -c \"npm run test:report\""
+    "test:watch": "chokidar \"tests/**/*.ts\" \"contracts/**/*.clar\" -c \"npm run test:report\"",
+    "check": "clarinet check",
+    "check-deployment": "bash scripts/check-deployment.sh",
+    "preflight": "bash scripts/preflight.sh",
+    "deploy:devnet": "clarinet deployments apply --devnet",
+    "deploy:testnet": "clarinet deployments generate --testnet && clarinet deployments apply --testnet",
+    "integrate": "clarinet integrate",
+    "start": "npm run preflight && cd frontend && npm run dev"
   },
   "author": "",
   "license": "ISC",

@@ -2,8 +2,22 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useContractBalance, useTotalSchedules } from "@/hooks/useVestingData";
 
 const HeroSection = () => {
+  const { data: contractBalance, isLoading: isBalanceLoading } = useContractBalance();
+  const { data: totalSchedules, isLoading: isSchedulesLoading } = useTotalSchedules();
+
+  // Calculate TVL in USD (using approximate STX price of $0.45)
+  const tvlInUSD = contractBalance ? (contractBalance / 1_000_000) * 0.45 : 0;
+  const formattedTVL = isBalanceLoading 
+    ? "..." 
+    : `$${(tvlInUSD / 1_000_000).toFixed(1)}M${tvlInUSD >= 1_000_000 ? '+' : ''}`;
+  
+  const formattedSchedules = isSchedulesLoading 
+    ? "..." 
+    : `${totalSchedules}${totalSchedules >= 100 ? '+' : ''}`;
+
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
       {/* Animated background */}
@@ -67,11 +81,15 @@ const HeroSection = () => {
             className="grid grid-cols-3 gap-4 md:gap-8 max-w-2xl mx-auto"
           >
             <div className="p-4 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50">
-              <div className="text-2xl md:text-3xl font-bold text-primary">$2.4M+</div>
+              <div className="text-2xl md:text-3xl font-bold text-primary">
+                {formattedTVL}
+              </div>
               <div className="text-xs md:text-sm text-muted-foreground">Total Value Locked</div>
             </div>
             <div className="p-4 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50">
-              <div className="text-2xl md:text-3xl font-bold text-accent">500+</div>
+              <div className="text-2xl md:text-3xl font-bold text-accent">
+                {formattedSchedules}
+              </div>
               <div className="text-xs md:text-sm text-muted-foreground">Active Schedules</div>
             </div>
             <div className="p-4 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50">

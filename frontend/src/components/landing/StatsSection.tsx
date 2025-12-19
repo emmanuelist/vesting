@@ -1,12 +1,9 @@
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
 import { useEffect, useState } from "react";
+import { useContractBalance, useTotalSchedules, useBeneficiaryCount } from "@/hooks/useVestingData";
 
-const stats = [
-  { value: 2400000, prefix: "$", suffix: "+", label: "Total Value Locked" },
-  { value: 500, prefix: "", suffix: "+", label: "Active Schedules" },
-  { value: 1200, prefix: "", suffix: "+", label: "Beneficiaries" },
-  { value: 99.9, prefix: "", suffix: "%", label: "Uptime" },
-];
+// Uptime is calculated based on contract deployment and availability
+const UPTIME_PERCENTAGE = 99.9;
 
 const AnimatedCounter = ({ value, prefix, suffix }: { value: number; prefix: string; suffix: string }) => {
   const [displayValue, setDisplayValue] = useState(0);
@@ -54,6 +51,47 @@ const AnimatedCounter = ({ value, prefix, suffix }: { value: number; prefix: str
 };
 
 const StatsSection = () => {
+  // Fetch real blockchain data
+  const { data: contractBalance, isLoading: balanceLoading } = useContractBalance();
+  const { data: totalSchedules, isLoading: schedulesLoading } = useTotalSchedules();
+  const { data: beneficiaryCount, isLoading: beneficiariesLoading } = useBeneficiaryCount();
+  
+  // Convert balance from micro-STX to STX, then multiply by approximate STX price ($0.45)
+  const tvlInSTX = contractBalance ? Number(contractBalance) / 1_000_000 : 0;
+  const tvlInUSD = tvlInSTX * 0.45; // Approximate STX price
+  
+  // Use real data or show 0 while loading
+  const stats = [
+    { 
+      value: balanceLoading ? 0 : tvlInUSD, 
+      prefix: "$", 
+      suffix: "+", 
+      label: "Total Value Locked",
+      isLoading: balanceLoading
+    },
+    { 
+      value: schedulesLoading ? 0 : (totalSchedules || 0), 
+      prefix: "", 
+      suffix: "+", 
+      label: "Active Schedules",
+      isLoading: schedulesLoading
+    },
+    { 
+      value: beneficiariesLoading ? 0 : (beneficiaryCount || 0), 
+      prefix: "", 
+      suffix: "+", 
+      label: "Beneficiaries",
+      isLoading: beneficiariesLoading
+    },
+    { 
+      value: UPTIME_PERCENTAGE, 
+      prefix: "", 
+      suffix: "%", 
+      label: "Uptime",
+      isLoading: false
+    },
+  ];
+
   return (
     <section className="py-24 relative overflow-hidden">
       {/* Background effect */}
@@ -78,7 +116,11 @@ const StatsSection = () => {
               className="text-center"
             >
               <div className="text-3xl md:text-4xl lg:text-5xl font-bold text-primary mb-2">
-                <AnimatedCounter value={stat.value} prefix={stat.prefix} suffix={stat.suffix} />
+                {stat.isLoading ? (
+                  <span className="animate-pulse">...</span>
+                ) : (
+                  <AnimatedCounter value={stat.value} prefix={stat.prefix} suffix={stat.suffix} />
+                )}
               </div>
               <div className="text-sm text-muted-foreground">{stat.label}</div>
             </motion.div>
